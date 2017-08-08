@@ -17,19 +17,37 @@ def main():
 	classify()
 
 def train():
-	dictionary = np.array(fetch_dictionary())
-	p_y_is_spam = getp_y()
-	p_x = getp_x()
-
-def getp_x():
-	c = 0.5 #threshold for p(x) approximation in bayes rule
+	dictionary_set = fetch_dictionary()
+	dictionary = np.array(list(dictionary_set))
+	spam_vector, ham_vector, num_spam = get_vector(dictionary)
+	num_ham = len(train_y) - num_spam
 	
-def getp_y():
-	count = 0
-	for i in train_y:
-		if i == "spam":
-			count += 1
-	return count / len(train_y)
+	i = test_x[0].split(" ")
+	p_x = getp_x(i)
+
+def get_vector(dictionary):
+	n = len(dictionary)
+	spam_vector = [0] * n
+	ham_vector = [0] * n
+	num_spam = 0
+	for i in data:
+		if i[0] == "spam":
+			vector = spam_vector
+			num_spam += 1
+		else:
+			vector = ham_vector
+
+		words = set(i[1])
+		for j in words:
+			for k in range(n):
+				if j == dictionary[k]:
+					vector[k] += 1
+	return spam_vector, ham_vector, num_spam
+			
+		
+	
+def getp_x(i):
+	c = 0.5 #threshold for p(x) approximation in bayes rule
 	
 def bayes_rule(p_x_given_y, p_y, p_x):
 	"""

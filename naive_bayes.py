@@ -2,84 +2,126 @@ from time import sleep
 import pandas
 import numpy as np
 import pickle
-from init_dictionary import create_dictionary
+import init_dictionary
 from os.path import isfile as file_exists
 
-test = pandas.read_csv("emails/test_data.csv", sep="\t")
-data = pandas.read_csv("emails/training_data.csv", sep="\t")
-#test.columns = ["Spam?", "Text"]
-#data.columns = ["Spam?", "Text"]
-train_y, train_x = data.iloc[0:, 0], data.iloc[0:, 1]
-test_y, test_x = data.iloc[0:, 0], data.iloc[0:, 1]
+def get_file_classifications():
+	text = init_dictionary.get_files("emails/training_files.txt")
+	spam = []
+	ham = []
+	spam_count = 0
+	ham_count = 0
+	for i in text:
+		if i[0] == 's':
+			spam += [i]
+			spam_count += 1
+		else:
+			ham += [i]
+			ham_count += 1
+	total = spam_count + ham_count
+	print("Spam files:", spam_count, "| Ham files:", ham_count, "| Total:", total, "| % spam:", spam_count / total)
+	return spam, ham, spam_count, ham_count, total
+
+data_path = "emails/lingspam_public/bare/part1/"
+test_path = "emails/lingspam_public/bare/part2/"
+spam_list, ham_list, spam_count, ham_count, file_count = get_file_classifications()
 
 def main():
-	train()
+	spam_vector, ham_vector, dictionary, dictionary_set, lookup = train()
+	classify(spam_vector, ham_vector, dictionary, dictionary_set, lookup)
 
+def classify(spam_vector, ham_vector, dictionary, dictionary_set, lookup):
+	f = open(test_path + "5-1439msg1.txt", 'r')
+	correct_answer = "ham" #"spam" if test_files[0][0] == 's' else "ham"
+	f.readline();	f.readline()
+	email = f.read().split(' ')
+	
+	#p(y=spam)
+	p_y = spam_count / file_count
+	print("p(y=spam)=" + str(p_y))
+	
+	#p(x|y=spam)
+	p_x_y_spam = vector_probability(spam_vector, email, dictionary, dictionary_set, spam_count, lookup)
+	print("p(x|y=spam)=" + str(p_x_y_spam))
+	
+	#p(x|y=ham)
+	p_x_y_ham = vector_probability(ham_vector, email, dictionary, dictionary_set, ham_count, lookup)
+	print("p(x|y=ham)=" + str(p_x_y_ham))
+	
+	p_x = (p_y * p_x_y_spam) + ((ham_count / file_count) * p_x_y_ham)
+	print("p(x)=" + str(p_x))
+	prediction = bayes_rule(p_x_y_spam, p_y, p_x)
+	final_answer = predict(prediction)
+	print("p(y=spam|x) = " + str(prediction * 100) + "% -- " + final_answer)
+	
+	if final_answer == correct_answer:
+		print("Correct!")
+	else:
+		if final_answer == "push; not enough data to tell.":
+			print("Algorithm error, we won't count that...")
+		else:
+			print("Wrong")
+			
+	
 def train():
 	#get the dictionary as a set and a vector
 	dictionary_set = fetch_dictionary()
 	dictionary = np.array(list(dictionary_set))
 	
 	#Get some numbers for the bayes calculation
-	n = len(train_x)
-	spam_vector, ham_vector, num_spam = get_vector(dictionary)
-	num_ham = len(train_y) - num_spam
+	spam_vector, ham_vector, lookup = parse_words(dictionary, dictionary_set)
+	print("Got word vectors for spam and ham and a handy dictionary for word lookup.")
 
-	#p(y=spam)
-	p_y = num_spam / n
+	return spam_vector, ham_vector, dictionary, dictionary_set, lookup
 
-	email = test_x[0]
-	correct_answer = test_y[0]
 	
-	#p(x|y=spam)
-	p_x_y_spam = vector_probability(spam_vector, email, dictionary, dictionary_set, num_spam)
-
-	#p(x|y=ham)
-	p_x_y_ham = vector_probability(ham_vector, email, dictionary, dictionary_set, num_ham)
-
-	print(bayes_rule(p_x_y_spam, p_y, (p_y * p_x_y_spam) + ((num_ham / n) * p_x_y_ham)))
-	
-
-def vector_probability(vector, email, dictionary, dictionary_set, classification_count):
+def vector_probability(vector, email, dictionary, dictionary_set, classification_count, lookup):
 	n = len(dictionary)
 	probability = 1
-	for i in email:
-		if i not in dictionary_set:
-			continue
-		for j in range(n):
-			if i == dictionary[j]:
-				probability *= (vector[j] / classification_count)
-			else:
-				probability *= (1 - (vector[j] / classification_count))
+	words = set(email)
+	for i in dictionary:
+		if i in words:
+			r = (vector[lookup[i]] / classification_count)
+			if r == 0.0: continue
+			probability *= r
+		else:
+			r = (1 - (vector[lookup[i]] / classification_count))
+			if r == 1: continue
+			probability *= r
 	return probability
 	
-def get_vector(dictionary):
+def parse_words(dictionary, dictionary_set):
 	n = len(dictionary)
 	lookup = dict()
 	spam_vector = [0] * n
 	ham_vector = [0] * n
-	num_spam = 0
-	for i in range(n):
-		if train_y.iat[i] == "spam":
-			vector = spam_vector
-			num_spam += 1
-		else:
-			vector = ham_vector
 
-		words = set(train_x.iat[i])
-		for j in words:
-			if j in lookup:
-				vector[lookup[j]] += 1
+	for i in range(n):
+		lookup[dictionary[i]] = i #build dictionary to make this entire function close to ~O(2n)	 
+
+	spam_vector = word_count(spam_list, spam_vector, dictionary_set, lookup)
+	ham_vector = word_count(ham_list, ham_vector, dictionary_set, lookup)
+	
+	return spam_vector, ham_vector, lookup
+
+def word_count(lst, vector, dictionary_set, lookup):
+	for i in lst:
+		f = open(data_path + i, 'r')
+		text = set(f.read().split(' '))
+		for i in text:
+			if i not in dictionary_set:
 				continue
-			for k in range(n):
-				lookup[j] = k
-				if j == dictionary[k]:
-					vector[k] += 1
-	return spam_vector, ham_vector, num_spam
-	
-def getp_x(i):
-	c = 0.5 #threshold for p(x) approximation in bayes rule
-	
+			vector[lookup[i]] += 1
+	return vector
+
+def predict(probability):
+	if probability < 0.5:
+		return "ham"
+	elif probability > 0.5:
+		return "spam"
+	else:
+		return "push; not enough data to tell."
+
 def bayes_rule(p_x_given_y, p_y, p_x):
 	"""
 	       p(x|y)p(y)
@@ -91,12 +133,15 @@ def bayes_rule(p_x_given_y, p_y, p_x):
 def fetch_dictionary():
 	if not file_exists("dictionary.dict"):
 		print("Dictionary didn't exist, creating...")
-		create_dictionary()
+		init_dictionary.create_dictionary()
 		print("Sleeping for a second to avoid conflicts with file IO.")
 		sleep(1)		
 	try: dictionary = pickle.load(open("dictionary.dict", 'br'))
-	except: print("File IO error loading dictionary in naive_bayes.py")
+	except:
+		print("File IO error loading dictionary in naive_bayes.py")
+		exit()
 	print("Successfully loaded dictionary in naive_bayes.")
 	return dictionary
+	
 
 main()

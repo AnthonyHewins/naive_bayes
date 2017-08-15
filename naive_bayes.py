@@ -5,6 +5,9 @@ import pickle
 import init_dictionary
 from os.path import isfile as file_exists
 
+training_path = "emails/lingspam_public/bare/part1/"
+test_path = "emails/lingspam_public/bare/part2/"
+
 def get_file_classifications():
 	text = init_dictionary.get_files("emails/training_files.txt")
 	spam = []
@@ -18,16 +21,14 @@ def get_file_classifications():
 		else:
 			ham += [i]
 			ham_count += 1
-	total = spam_count + ham_count
-	print("Spam files:", spam_count, "| Ham files:", ham_count, "| Total:", total, "| % spam:", spam_count / total)
-	return spam, ham, spam_count, ham_count, total
+	return spam, ham, spam_count, ham_count, ham_count + spam_count
 
-data_path = "emails/lingspam_public/bare/part1/"
-test_path = "emails/lingspam_public/bare/part2/"
 spam_list, ham_list, spam_count, ham_count, file_count = get_file_classifications()
 
 def main():
 	spam_vector, ham_vector, dictionary, dictionary_set, lookup = train()
+	print("Spam vector:", spam_vector[0:100])
+	print("Ham vector:", ham_vector[0:100])
 	classify(spam_vector, ham_vector, dictionary, dictionary_set, lookup)
 
 def classify(spam_vector, ham_vector, dictionary, dictionary_set, lookup):
@@ -82,11 +83,9 @@ def vector_probability(vector, email, dictionary, dictionary_set, classification
 	for i in dictionary:
 		if i in words:
 			r = (vector[lookup[i]] / classification_count)
-			if r == 0.0: continue
 			probability *= r
 		else:
 			r = (1 - (vector[lookup[i]] / classification_count))
-			if r == 1: continue
 			probability *= r
 	return probability
 	
@@ -106,7 +105,7 @@ def parse_words(dictionary, dictionary_set):
 
 def word_count(lst, vector, dictionary_set, lookup):
 	for i in lst:
-		f = open(data_path + i, 'r')
+		f = open(training_path + i, 'r')
 		text = set(f.read().split(' '))
 		for i in text:
 			if i not in dictionary_set:
